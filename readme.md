@@ -11,12 +11,24 @@
 ## 开发思路
 
 - [ ] 初步esp32（复杂处理）+esp8266（简单处理），使用ESP-MESH
+
 - [ ] 后续添加蓝牙控制
+
 - [ ] 统一搭建开发框架，VScode+Platform IO
+
 - [ ] 手机扫一扫配网
+
+- [ ] 串口配置从机名称
+
+- [ ] 手机扫一扫配置从机名称
+
 - [ ] 数据外发
+
 - [ ] 添加显示终端
+
 - [ ] esp32通过红外检测进行esp8266的控制
+
+      ​
 
 
 
@@ -35,9 +47,12 @@
 
 ## 注意事项
 
-1. esp-01s模块进入下载模式：需要将IO0和RST拉低再上电，其它引脚除了串口和电源都悬空，下载显示connecting的时候拔掉RST上的GND即可；如果是esp-01会有区别
-2. [VScode+Platform IO环境搭建](https://blog.csdn.net/qlexcel/article/details/121449441)
-3. 下载的时候需要修改platformio.ini中的串口号：upload_port
+1. esp-01s模块进入普通下载模式：需要将IO0和RST拉低再上电，其它引脚除了串口和电源都悬空，下载显示connecting的时候拔掉RST上的GND即可；如果是esp-01会有区别
+2. 使用Esp-01s自动下载器进行下载，需要在**Platformio.ini里添加如下行**：upload_resetmethod = nodemcu
+3. [VScode+Platform IO环境搭建](https://blog.csdn.net/qlexcel/article/details/121449441)
+4. 下载的时候需要修改platformio.ini中的串口号：upload_port
+5. VsCode PlatformIo 插件新建项目下载慢的解决办法 见 material - VsCode PlatformIo 插件新建项目下载慢的解决办法.pdf，实测ESP32新建项目大概十分钟左右，缓存二百多M，ESP8266要更快一些
+6. ​
 
 
 
