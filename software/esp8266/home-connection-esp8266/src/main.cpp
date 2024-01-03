@@ -36,6 +36,9 @@
 */
 
 #include <painlessMesh.h>
+#include <Arduino.h>
+
+#define LED_BUILTIN 2
 
 #define   MESH_PREFIX     "espMesh"
 #define   MESH_PASSWORD   "12345678"
@@ -62,10 +65,6 @@ void sendMessage(uint32_t index, uint32_t sta) {
   mesh.sendBroadcast( msg );
   Serial.printf("send = %s\n", msg.c_str());
 
-  // String msg = "ACK from esp8266, index: " + index;
-  // msg = msg + ", sta:" + sta;
-  // msg = msg + ", Id:" + mesh.getNodeId() + ", Name:" + ESP8266_NAME;
-  // mesh.sendBroadcast( msg );
   // taskSendMessage.setInterval( random( TASK_SECOND * 1, TASK_SECOND * 5 ));
 }
 
@@ -77,14 +76,13 @@ void receivedCallback( uint32_t from, String &msg ) {
 
   Serial.printf("Received from %u msg=%s\n", from, msg.c_str());
   
-  
   p = strstr(msg.c_str(), ESP8266_NAME);
   if (p != NULL)
   {
     strncpy(num_str, p + strlen(ESP8266_NAME) + 1, 1); // 跳过关键字
     sta = atoi(num_str); // 将剩余的字符串转换为整数
     Serial.printf("rx ok %d\n", sta);;
-    //digitalWrite(LED_BUILTIN, sta); 
+    digitalWrite(LED_BUILTIN, sta); 
     num++;
     sendMessage(num, sta);
   }
@@ -108,6 +106,7 @@ void nodeTimeAdjustedCallback(int32_t offset) {
 }
 
 void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);     // Initialize the LED_BUILTIN pin as an output
   Serial.begin(115200);
   Serial.printf("home-connection-esp8266, my name is %s\r\n", ESP8266_NAME);
 
