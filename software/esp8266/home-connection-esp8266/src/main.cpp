@@ -1,44 +1,8 @@
-// #include <Arduino.h>
-
-// #define LED_BUILTIN 2   //ESP-01S模块自身的LED，对应GPIO2，低电平亮
-
-// // put function declarations here:
-// int myFunction(int, int);
-
-// void setup() {
-//   // put your setup code here, to run once:
-//   int result = myFunction(2, 3);
-//   Serial.begin(115200);//串口波特率配置
-//   pinMode(LED_BUILTIN, OUTPUT);     // Initialize the LED_BUILTIN pin as an output
-// }
-
-// void loop() {
-//   // put your main code here, to run repeatedly:
-//   Serial.print("Hello world!\r\n");//串口打印
-  
-//   digitalWrite(LED_BUILTIN, LOW);   // Turn the LED on
-//   delay(20);                      // Wait for a second
-//   digitalWrite(LED_BUILTIN, HIGH);  // Turn the LED off by making the voltage HIGH
-//   delay(200);                      // Wait for two seconds (to demonstrate the active low LED)
-
-// }
-
-// // put function definitions here:
-// int myFunction(int x, int y) {
-//   return x + y;
-// }
-
-/*
-  Rui Santos
-  Complete project details at https://RandomNerdTutorials.com/esp-mesh-esp32-esp8266-painlessmesh/
-  
-  This is a simple example that uses the painlessMesh library: https://github.com/gmag11/painlessMesh/blob/master/examples/basic/basic.ino
-*/
-
 #include <painlessMesh.h>
 #include <Arduino.h>
 
 #define LED_BUILTIN 2
+#define CTR_PIN     0
 
 #define   MESH_PREFIX     "espMesh"
 #define   MESH_PASSWORD   "12345678"
@@ -83,6 +47,7 @@ void receivedCallback( uint32_t from, String &msg ) {
     sta = atoi(num_str); // 将剩余的字符串转换为整数
     Serial.printf("rx ok %d\n", sta);;
     digitalWrite(LED_BUILTIN, sta); 
+    digitalWrite(CTR_PIN, sta); 
     num++;
     sendMessage(num, sta);
   }
@@ -107,6 +72,10 @@ void nodeTimeAdjustedCallback(int32_t offset) {
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);     // Initialize the LED_BUILTIN pin as an output
+  pinMode(CTR_PIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, true); 
+  digitalWrite(CTR_PIN, true); 
+
   Serial.begin(115200);
   Serial.printf("home-connection-esp8266, my name is %s\r\n", ESP8266_NAME);
 
