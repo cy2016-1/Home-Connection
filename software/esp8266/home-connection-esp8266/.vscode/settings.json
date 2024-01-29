@@ -3,6 +3,15 @@
         "array": "cpp",
         "string": "cpp",
         "string_view": "cpp",
-        "ranges": "cpp"
+        "ranges": "cpp",
+        "hmac.h": "c",
+        "esp_log.h": "c",
+        "esp_err.h": "c",
+        "esp_wifi.h": "c",
+        "esp_system.h": "c",
+        "base64.h": "c",
+        "initialtoken.h": "c",
+        "mbedtls_base64.h": "c",
+        "vector": "cpp"
     }
 }

@@ -11,11 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "esp_log.h"
-#include "esp_err.h"
-#include "esp_wifi.h"
-#include "esp_system.h"
-#include "mbedtls/base64.h"
+#include "mbedtls_base64.h"
 #include "hmac.h"
 
 #include "initialToken.h"
@@ -123,23 +119,24 @@ char* url_encoding_for_token(CONNECT_MSG* msg)
  * @param  ONENET_METHOD_MD5：hmac_md5
  * @param  ONENET_METHOD_SHA1:hmac_sha1
  * @param  ONENET_METHOD_SHA256:hmac_sha256
- * @return esp_err_t
+ * @return uint8_t
  */
-esp_err_t onenet_connect_msg_init(oneNET_connect_msg_t* oneNET_connect_msg, method_t token_method)
+uint8_t onenet_connect_msg_init(oneNET_connect_msg_t* oneNET_connect_msg, method_t token_method)
 {
     char plaintext[64] = { 0 };
     char ciphertext[64] = { 0 };
     char hmac[64] = { 0 };
 
     strcpy(oneNET_connect_msg->produt_id, ONENET_PRODUCT_ID);
+    strcpy(oneNET_connect_msg->device_name, ONENET_DEVICE_NAME);
 
     CONNECT_MSG oneNET_msg = {
          .et = "1959846627",
          .version = "2018-10-31",
     };
     uint8_t* mac = calloc(1, 6);
-    esp_wifi_get_mac(WIFI_IF_STA, mac);
-    sprintf(oneNET_connect_msg->device_name, "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    // esp_wifi_get_mac(WIFI_IF_STA, mac);
+    // sprintf(oneNET_connect_msg->device_name, "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     memset(oneNET_msg.res, 0, sizeof(oneNET_msg.res));
 
     sprintf(oneNET_msg.res, "products/%s/devices/%s", oneNET_connect_msg->produt_id, oneNET_connect_msg->device_name);
@@ -191,6 +188,6 @@ esp_err_t onenet_connect_msg_init(oneNET_connect_msg_t* oneNET_connect_msg, meth
     strcpy(oneNET_connect_msg->token, token);
     free(mac);
     free(token);
-    ESP_LOGI(TAG, "%s", oneNET_connect_msg->token);
-    return ESP_OK;
+    // ESP_LOGI(TAG, "%s", oneNET_connect_msg->token);
+    return 0;
 }

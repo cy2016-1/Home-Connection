@@ -1,31 +1,33 @@
 #ifndef INITIALTOKEN_H
 #define INITIALTOKEN_H
 
-//ä½¿èƒ½è‡ªåŠ¨æ³¨å†Œ,å±è”½ åˆ™ä¸ä½¿ç”¨è‡ªåŠ¨æ³¨å†ŒåŠŸèƒ½
+//Ê¹ÄÜ×Ô¶¯×¢²á,ÆÁ±Î Ôò²»Ê¹ÓÃ×Ô¶¯×¢²á¹¦ÄÜ
 /**
- * @brief å¯åŠ¨è‡ªåŠ¨æ³¨å†ŒåŠŸèƒ½ï¼Œä¸é€‚ç”¨æ³¨é‡Šæ‰å³å¯
+ * @brief Æô¶¯×Ô¶¯×¢²á¹¦ÄÜ£¬²»ÊÊÓÃ×¢ÊÍµô¼´¿É
  *
  */
-#define ONENET_DEVICE_DYNAMIC_ENABLE 
+// #define ONENET_DEVICE_DYNAMIC_ENABLE 
  /**
-  * @brief oneNET çš„äº§å“ID
+  * @brief oneNET µÄ²úÆ·ID
   *
   */
-#define ONENET_PRODUCT_ID "tJZPdrj1bL"  //äº§å“ID
+#define ONENET_PRODUCT_ID "NF8Nx"  //²úÆ·ID
+
+#define ONENET_DEVICE_NAME "desktop_led"  //Éè±¸Ãû×Ö
 
 #ifdef ONENET_DEVICE_DYNAMIC_ENABLE
   /**
-   * @brief oneNET çš„äº§å“å¯†é’¥
+   * @brief oneNET µÄ²úÆ·ÃÜÔ¿
    *
    */
-#define ONENET_PRODUCT_KEY "kfcPMeFvN8Hf31+Heyd9mzc7ueWrR8MLwXPR" //äº§å“KEY
+#define ONENET_PRODUCT_KEY "" //²úÆ·KEY
 
 #else
   /**
-   * @brief oneNET çš„è®¾å¤‡å¯†é’¥ ä¸å¯ç”¨è‡ªåŠ¨æ³¨å†ŒåŠŸèƒ½è¯·å¡«å…¥è®¾å¤‡key
+   * @brief oneNET µÄÉè±¸ÃÜÔ¿ ²»ÆôÓÃ×Ô¶¯×¢²á¹¦ÄÜÇëÌîÈëÉè±¸key
    *
    */
-#define ONENET_DEVICE_KEY " " //è®¾å¤‡KEY
+#define ONENET_DEVICE_KEY "MN5OHU=" //Éè±¸KEY
 
 #endif
 
@@ -42,6 +44,6 @@ typedef struct ONENET_CONNECT_MSG
     char token[512];
 }oneNET_connect_msg_t;
 
-esp_err_t onenet_connect_msg_init(oneNET_connect_msg_t* oneNET_connect_msg, method_t token_method);
+uint8_t onenet_connect_msg_init(oneNET_connect_msg_t* oneNET_connect_msg, method_t token_method);
 
 #endif
