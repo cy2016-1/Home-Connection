@@ -9,7 +9,7 @@ extern "C"{
 
 #define DEEPSLEEPTIME      60000  // 无操作多少毫秒后进入深度休眠 10min - 600000
 
-#define   KEY_PIN          2  //按键引脚
+#define   KEY_PIN          1  //按键引脚
 #define   LED_BUILTIN      8  //LED引脚
 
 // 需要修改的地方
@@ -214,7 +214,7 @@ void setup() {
 
   // tim1.attach(20, send_identifier_data);                            //定时每20秒调用一次发送数据
 
-  esp_deep_sleep_enable_gpio_wakeup(1ULL <<  2 , ESP_GPIO_WAKEUP_GPIO_HIGH); //ESP_GPIO_WAKEUP_GPIO_HIGH 高电平唤醒
+  esp_deep_sleep_enable_gpio_wakeup(1ULL << 1 , ESP_GPIO_WAKEUP_GPIO_HIGH); //ESP_GPIO_WAKEUP_GPIO_HIGH 高电平唤醒
 }
 
 void loop() {
@@ -242,8 +242,8 @@ void loop() {
     wakeup_flag = true;
 
     gpio_deep_sleep_hold_dis();
-    esp_deep_sleep_enable_gpio_wakeup(1ULL <<  2 , ESP_GPIO_WAKEUP_GPIO_HIGH); //ESP_GPIO_WAKEUP_GPIO_HIGH 高电平唤醒
-    pinMode(KEY_PIN, INPUT_PULLDOWN);
+    esp_deep_sleep_enable_gpio_wakeup(1ULL << 1 , ESP_GPIO_WAKEUP_GPIO_HIGH); //ESP_GPIO_WAKEUP_GPIO_HIGH 高电平唤醒
+    pinMode(KEY_PIN, INPUT_PULLUP);
     esp_deep_sleep_start();
   }
   else if(ir_state == true)
