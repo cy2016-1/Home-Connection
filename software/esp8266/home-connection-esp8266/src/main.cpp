@@ -55,10 +55,9 @@ void setupWifi()
   WiFi.begin(ssid, password);
   while (!WiFi.isConnected())
   {
-    Serial.print(".");
-    //指示灯提示
     digitalWrite(LED_BUILTIN, false); //true - off
     delay(500);
+    Serial.print(".");
     digitalWrite(LED_BUILTIN, true); //true - off
   }
 
@@ -164,8 +163,10 @@ void clientReconnect()
       Serial.println(oneNET_connect_msg.produt_id);
       Serial.println(oneNET_connect_msg.token);
       digitalWrite(LED_BUILTIN, false); 
-      delay(2000);
+      delay(500);
       digitalWrite(LED_BUILTIN, true); //true - off
+      delay(2000);
+      
     }
   }
 }

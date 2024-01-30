@@ -1,168 +1,265 @@
-// #include <Arduino.h>
-
-// #define LED_BUILTIN 8   //ESP32模块自身的LED，对应GPIO8，低电平亮
-
-// // put function declarations here:
-// int myFunction(int, int);
-
-// void setup() {
-//   // put your setup code here, to run once:
-//   Serial.begin(115200);//串口波特率配置
-//   pinMode(LED_BUILTIN, OUTPUT);     // Initialize the LED_BUILTIN pin as an output
-// }
-
-// void loop() {
-//   // put your main code here, to run repeatedly:
-//   Serial.print("Hello world!\r\n");//串口打印
-  
-//   digitalWrite(LED_BUILTIN, LOW);   // Turn the LED on
-//   delay(20);                      // Wait for a second
-//   digitalWrite(LED_BUILTIN, HIGH);  // Turn the LED off by making the voltage HIGH
-//   delay(200);                      // Wait for two seconds (to demonstrate the active low LED)
-
-// }
-
-
-#include <painlessMesh.h>
-#include "OneButton.h"
-
-
-#define   KEY_PIN          9  //按键引脚
-#define   LED_PIN          8  //LED引脚
-#define   ACTION_DELAY_TIM_S  3  //延时动作
-
-#define   MESH_PREFIX     "espMesh"
-#define   MESH_PASSWORD   "12345678"
-#define   MESH_PORT       5555
-
-OneButton button(KEY_PIN, true);
-
-Scheduler userScheduler; // to control your personal task
-painlessMesh  mesh;
-uint8_t ctr_relay1_sta = 1;
-
-// User stub
-void sendMessage() ; // Prototype so PlatformIO doesn't complain
-void action_delay() ;
-
-Task taskSendMessage( TASK_SECOND * 5 , TASK_FOREVER, &sendMessage );
-Task taskAction_delay( TASK_SECOND, TASK_FOREVER, &action_delay );
-
-void ledBlink() {
-  digitalWrite(LED_PIN, LOW);
-  delay(20); 
-  digitalWrite(LED_PIN, HIGH);
-  delay(20); 
-  digitalWrite(LED_PIN, LOW);
-  delay(20); 
-  digitalWrite(LED_PIN, HIGH);
+#include <Arduino.h>
+#include <ArduinoJson.h>
+#include <WiFi.h>
+#include "PubSubClient.h"
+#include "Ticker.h"
+extern "C"{
+#include "initialToken.h"
 }
 
-/////////////////////////////////MESH////////////////////////////////////////////////  
-void sendMessage() {
-  String msg = "esp32 ctr_relay1:";
-  msg += ctr_relay1_sta;
-  msg = msg + ", Id:" + mesh.getNodeId();
-  mesh.sendBroadcast( msg );
-  Serial.printf("send = %s\n", msg.c_str());
-  //taskSendMessage.setInterval( random( TASK_SECOND * 1, TASK_SECOND * 5 ));  //线程内延时
-}
+#define DEEPSLEEPTIME      60000  // 无操作多少毫秒后进入深度休眠 10min - 600000
 
-// Needed for painless library
-void receivedCallback( uint32_t from, String &msg ) {
-  Serial.printf("startHere: Received from %u msg=%s\n", from, msg.c_str());
-}
+#define   KEY_PIN          2  //按键引脚
+#define   LED_BUILTIN      8  //LED引脚
 
-void newConnectionCallback(uint32_t nodeId) {
-    Serial.printf("--> startHere: New Connection, nodeId = %u\n", nodeId);
-}
+// 需要修改的地方
+char identifier_name1[] = "ir_sta"; //物模型名称1
 
-void changedConnectionCallback() {
-  Serial.printf("Changed connections\n");
-}
+const char *ssid = "9x";               //wifi名
+const char *password = "1984832368";       //wifi密码
 
-void nodeTimeAdjustedCallback(int32_t offset) {
-    Serial.printf("Adjusted time %u. Offset = %d\n", mesh.getNodeTime(),offset);
-}
+const char *mqtt_server = "183.230.40.96"; //onenet 的 IP地址
+const int port = 1883;                     //端口号
+
+//收发信息缓冲区
+char msgJson[100]; 
+char dataPostTopic_str[100];
+char dataPostReplyTopic_str[100];
+char dataSetTopic_str[100];
+char dataSetReplyTopic_str[100];
+char dataSetReply_str[50];
+//信息模板
+char dataPostTopic[] = "$sys/%s/%s/thing/property/post"; //数据上传
+char dataPostReplyTopic[] = "$sys/%s/%s/thing/property/post/reply"; //数据上传回复 
+char dataSetTopic[] = "$sys/%s/%s/thing/property/set";  //数据设置
+char dataSetReplyTopic[] = "$sys/%s/%s/thing/property/set_reply"; //数据设置回复 
+
+char dataPost[] = "{\"id\":\"123\",\"version\": \"1.0\",\"params\":{\"%s\":{\"value\":%s}}}";  //数据上传内容
+char dataSetReply[] = "{\"id\":\"%s\",\"code\": 200,\"msg\":\"sucess\"}"; //数据设置成功回复内容
+//定时器,用来循环上传数据
+Ticker tim1; 
+//第三方库初始化
+DynamicJsonDocument JSON_Buffer(2*1024); /* 申明一个大小为2K的DynamicJsonDocument对象JSON_Buffer,用于存储反序列化后的（即由字符串转换成JSON格式的）JSON报文，方式声明的对象将存储在堆内存中，推荐size大于1K时使用该方式 */
+oneNET_connect_msg_t oneNET_connect_msg;
+WiFiClient espClient;           //创建一个WIFI连接客户端
+PubSubClient client(espClient); // 创建一个PubSub客户端, 传入创建的WIFI客户端
+//全局定义
+bool ir_state = false; //true-on
+
+bool wakeup_flag = false;
+unsigned long sleep_count_millis = 0;
 
 
-/////////////////////////////////BUTTON//////////////////////////////////////////////// 
-
-
-void action_delay() {
-  static uint8_t time_num = 0;
-  // taskAction_delay.setInterval(TASK_SECOND * ACTION_DELAY_TIM_S );  //线程内延时
-  if (time_num ++ > ACTION_DELAY_TIM_S)
+//连接WIFI相关函数
+void setupWifi()
+{
+  delay(10);
+  Serial.println("连接WIFI");
+  WiFi.begin(ssid, password);
+  while (!WiFi.isConnected())
   {
-    time_num = 0;
-    ctr_relay1_sta = !ctr_relay1_sta;
-    sendMessage();
-    taskAction_delay.disable();
+    digitalWrite(LED_BUILTIN, false); //true - off
+    delay(500);
+    Serial.print(".");
+    digitalWrite(LED_BUILTIN, true); //true - off
+  }
+
+  Serial.println("OK");
+  Serial.println("Wifi连接成功");
+}
+
+
+//向主题(物模型)发送数据
+void send_identifier_data()
+{
+  if (client.connected())
+  {
+    if(ir_state == true)
+      snprintf(msgJson, sizeof(msgJson), dataPost, identifier_name1, "true"); //将数据套入dataTemplate模板中, 生成的字符串传给msgJson
+    else 
+      snprintf(msgJson, sizeof(msgJson), dataPost, identifier_name1, "false");
+    
+    Serial.print("public the data:");
+    Serial.println(msgJson);
+    client.publish(dataPostTopic_str, (uint8_t *)msgJson, strlen(msgJson));//发送数据到主题
+    
+  }
+}
+ 
+//收到主题下发的回调, 注意这个回调要实现三个形参 1:topic 主题, 2: payload: 传递过来的信息 3: length: 长度
+void callback(char *topic, byte *payload, unsigned int length)
+{
+  JsonObject root; 
+
+  Serial.println("message rev:");
+  Serial.println(topic);
+  // Serial.println(dataPostReplyTopic_str);
+  // Serial.println(dataSetTopic_str);
+  if(strcmp(topic, dataPostReplyTopic_str) == 0)
+  {
+    Serial.println("receive onenet PostReply");
+  }
+  else if(strcmp(topic, dataSetTopic_str) == 0) 
+  {
+    DeserializationError error = deserializeJson(JSON_Buffer, payload);
+    if (!error)
+    {
+      // root = JSON_Buffer.as<JsonObject>(); 
+      // if(JSON_Buffer["params"][identifier_name1] == true)
+      //   ir_state = true;
+      // else 
+      //   ir_state = false;
+      // digitalWrite(LED_BUILTIN, !ir_state); 
+      Serial.println("receive onenet ctr data");
+
+      for (size_t i = 0; i < length; i++)
+      {
+        Serial.print((char)payload[i]);
+      }
+
+      // 设置成功回复
+      const char* ID = root["id"];
+      // Serial.println(ID);
+      snprintf(dataSetReply_str, sizeof(dataSetReply_str), dataSetReply, ID); 
+      // Serial.print("public the data:");
+      // Serial.println(dataSetReply_str);
+      client.publish(dataSetReplyTopic_str, (uint8_t *)dataSetReply_str, strlen(dataSetReply_str));
+      send_identifier_data(); //更新线上数据
+    }
+    else
+    {
+      Serial.println("receive failed!!!");
+    }
+  }
+  else
+  {
+    Serial.println("other topic");
+    for (size_t i = 0; i < length; i++)
+    {
+      Serial.print((char)payload[i]);
+    }
+    Serial.println();
+  }
+
+}
+ 
+
+ 
+//重连函数, 如果客户端断线,可以通过此函数重连
+void clientReconnect()
+{
+  while (!client.connected()) //再重连客户端
+  {
+    Serial.println("reconnect MQTT...");
+    if (client.connect(oneNET_connect_msg.device_name, oneNET_connect_msg.produt_id, oneNET_connect_msg.token))
+    {
+      Serial.println("connected");
+      client.subscribe(dataPostReplyTopic_str); //订阅设备属性上报响应主题
+      client.subscribe(dataSetTopic_str); //订阅设备属性设置请求主题
+    }
+    else
+    {
+      Serial.println("failed");
+      Serial.println(client.state());
+      Serial.println("try again in 2 sec");
+      Serial.println(oneNET_connect_msg.device_name);
+      Serial.println(oneNET_connect_msg.produt_id);
+      Serial.println(oneNET_connect_msg.token);
+      digitalWrite(LED_BUILTIN, false); 
+      delay(500);
+      digitalWrite(LED_BUILTIN, true); //true - off
+      delay(2000);
+      
+    }
   }
 }
 
-void doubleclick()
-{
-  Serial.print("doubleclick");
-}
 
-void click()
+/////////////////////////////////IRQ//////////////////////////////////////////////// 
+void KEY_PIN_IRQ() // 检测到上升沿则继续延时 2秒消抖
 {
-  ctr_relay1_sta = 0;
-  sendMessage();  
-  taskAction_delay.enable();
+  Serial.println("irq check!");
+  sleep_count_millis = millis();
+  ir_state = true;
+  // send_identifier_data();
 }
-
-void LongPressStart(void *oneButton)
-{
-  ctr_relay1_sta = 0;
-  sendMessage();
-  // Serial.print(((OneButton *)oneButton)->getPressedMs());
-  Serial.print("\t - LongPressStart()\n");
-}
-
-void LongPressStop(void *oneButton)
-{
-  // Serial.print(((OneButton *)oneButton)->getPressedMs());
-  Serial.print("\t - LongPressStop()\n");
-  taskAction_delay.enable();
-}
-
 
 /////////////////////////////////MAIN//////////////////////////////////////////////// 
 void setup() {
-  button.attachClick(click); //单击
-  button.attachDoubleClick(doubleclick);  //双击
-  button.attachLongPressStart(LongPressStart, &button);  //长按开始
-  button.attachLongPressStop(LongPressStop, &button);  //长按释放
-  button.setLongPressIntervalMs(1000);
-
-  pinMode(LED_PIN, OUTPUT);
-  Serial.begin(115200);
+  Serial.begin(115200);                                  //初始化串口
   Serial.print("home-connection-esp32!\r\n");
-  ledBlink();
+  pinMode(LED_BUILTIN, OUTPUT);     // Initialize the LED_BUILTIN pin as an output
+  pinMode(KEY_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(KEY_PIN), KEY_PIN_IRQ, RISING); //中断的方式最快
+  digitalWrite(LED_BUILTIN, !ir_state); //true - off
 
-//mesh.setDebugMsgTypes( ERROR | MESH_STATUS | CONNECTION | SYNC | COMMUNICATION | GENERAL | MSG_TYPES | REMOTE ); // all types on
-  mesh.setDebugMsgTypes( ERROR | STARTUP );  // set before init() so that you can see startup messages
+  setupWifi();                     //调用函数连接WIFI
 
-  mesh.init( MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT );
-  mesh.onReceive(&receivedCallback);
-  mesh.onNewConnection(&newConnectionCallback);
-  mesh.onChangedConnections(&changedConnectionCallback);
-  mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
+  onenet_connect_msg_init(&oneNET_connect_msg,ONENET_METHOD_MD5);
+  client.setServer(mqtt_server, port);                   //设置客户端连接的服务器,连接Onenet服务器, 使用6002端口
+  client.connect(oneNET_connect_msg.device_name, oneNET_connect_msg.produt_id, oneNET_connect_msg.token); //客户端连接到指定的产品的指定设备.同时输入鉴权信息
+  if (client.connected())
+  {
+    Serial.println("OneNet is connected!");//判断是不是连好了.
+  }
+  client.setCallback(callback);                                //设置好客户端收到信息是的回调
+  // 主题格式组包
+  snprintf(dataPostTopic_str, sizeof(dataPostTopic_str), dataPostTopic, oneNET_connect_msg.produt_id, oneNET_connect_msg.device_name);
+  snprintf(dataPostReplyTopic_str, sizeof(dataPostReplyTopic_str), dataPostReplyTopic, oneNET_connect_msg.produt_id, oneNET_connect_msg.device_name);
+  snprintf(dataSetTopic_str, sizeof(dataSetTopic_str), dataSetTopic, oneNET_connect_msg.produt_id, oneNET_connect_msg.device_name);  
+  snprintf(dataSetReplyTopic_str, sizeof(dataSetReplyTopic_str), dataSetReplyTopic, oneNET_connect_msg.produt_id, oneNET_connect_msg.device_name);
+  //主题订阅
+  client.subscribe(dataPostReplyTopic_str); //订阅设备属性上报响应主题
+  client.subscribe(dataSetTopic_str); //订阅设备属性设置请求主题
 
-  userScheduler.addTask( taskSendMessage );
-  userScheduler.addTask( taskAction_delay );
-  //taskSendMessage.enable();
+  // tim1.attach(20, send_identifier_data);                            //定时每20秒调用一次发送数据
+
+  esp_deep_sleep_enable_gpio_wakeup(1ULL <<  2 , ESP_GPIO_WAKEUP_GPIO_HIGH); //ESP_GPIO_WAKEUP_GPIO_HIGH 高电平唤醒
 }
 
 void loop() {
-  button.tick();
-
-  mesh.update();
   
-  delay(20); 
-  //Serial.print("Hello world!\r\n");
+  if (!WiFi.isConnected()) //先看WIFI是否还在连接
+  {
+    setupWifi();
+  }
+  if (!client.connected()) //如果客户端没连接ONENET, 重新连接
+  {
+    clientReconnect();
+    delay(100);
+  }
+  client.loop(); //客户端循环检测
+
+  // 延时关灯和进入低功耗
+  if(millis()-sleep_count_millis > DEEPSLEEPTIME)  
+  {
+    ir_state = false;
+    send_identifier_data();
+
+    Serial.print("deep_sleep!\r\n");
+    delay(1000);
+
+    wakeup_flag = true;
+
+    gpio_deep_sleep_hold_dis();
+    esp_deep_sleep_enable_gpio_wakeup(1ULL <<  2 , ESP_GPIO_WAKEUP_GPIO_HIGH); //ESP_GPIO_WAKEUP_GPIO_HIGH 高电平唤醒
+    pinMode(KEY_PIN, INPUT_PULLDOWN);
+    esp_deep_sleep_start();
+  }
+  else if(ir_state == true)
+  {
+    send_identifier_data();
+    delay(100);
+    ir_state = false;
+  }
+
+  if(wakeup_flag)
+  {
+    sleep_count_millis = millis();
+    wakeup_flag = false;
+    Serial.print("wakeup!\r\n");
+  }
+
 }
 
 

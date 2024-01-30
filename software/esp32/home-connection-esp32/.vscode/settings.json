@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "mbedtls_base64.h": "c",
+        "hmac.h": "c"
+    }
+}

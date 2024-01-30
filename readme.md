@@ -57,11 +57,26 @@
 ## 注意事项
 
 1. esp-01s模块进入普通下载模式：需要将IO0和RST拉低再上电，其它引脚除了串口和电源都悬空，下载显示connecting的时候拔掉RST上的GND即可；如果是esp-01会有区别
+
 2. 使用Esp-01s自动下载器进行下载，需要在**Platformio.ini里添加如下行**：upload_resetmethod = nodemcu
+
 3. [VScode+Platform IO环境搭建](https://blog.csdn.net/qlexcel/article/details/121449441)
+
 4. 下载的时候需要修改platformio.ini中的串口号：upload_port
+
 5. VsCode PlatformIo 插件新建项目下载慢的解决办法 见 material - VsCode PlatformIo 插件新建项目下载慢的解决办法.pdf，实测ESP32新建项目大概十分钟左右，缓存二百多M，ESP8266要更快一些
-6. ​
+
+6. 目前用onenet碰见的坑是，免费版的可视化页面竟然没有按钮这个重要的组件，用了体验版的按钮后始终无法用可视化页面进行数据下发；mqtt新版、旧版、物联网平台、IOT Studio傻傻分不清楚，文档也是；物联网平台数据传输中的OneJson、自定义/透传、数据流这三种协议，一点也不兼容，彼此之间基本没有任何参考意义；onenet的场景联动感觉不太友好，比如想让一个设备的开关控制另一个设备的开关，不能直接绑定两个设备的状态，而是需要创建两个场景
+
+7. 在网上找了一个自动计算onenet token的库，搞了半天也没法自动注册，只用到了自动计算token的功能，为了兼容esp8266和esp32的arduino+platform Io环境，做了一些更改
+
+8. 用GPIO2做外部中断，配置为下拉输入，上升沿无法触发，配置为上拉输入，可以触发
+
+9. esp32进入深度睡眠后，如果唤醒，现象和重启是一样的
+
+   ​
+
+   ​
 
 
 
