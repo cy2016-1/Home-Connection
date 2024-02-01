@@ -121,14 +121,16 @@ char* url_encoding_for_token(CONNECT_MSG* msg)
  * @param  ONENET_METHOD_SHA256:hmac_sha256
  * @return uint8_t
  */
-uint8_t onenet_connect_msg_init(oneNET_connect_msg_t* oneNET_connect_msg, method_t token_method)
+uint8_t onenet_connect_msg_init(oneNET_connect_msg_t* oneNET_connect_msg, method_t token_method, const char *mqtt_product_id, const char *mqtt_device_name, const char *mqtt_device_key)
 {
     char plaintext[64] = { 0 };
     char ciphertext[64] = { 0 };
     char hmac[64] = { 0 };
 
-    strcpy(oneNET_connect_msg->produt_id, ONENET_PRODUCT_ID);
-    strcpy(oneNET_connect_msg->device_name, ONENET_DEVICE_NAME);
+    // strcpy(oneNET_connect_msg->produt_id, ONENET_PRODUCT_ID);
+    // strcpy(oneNET_connect_msg->device_name, ONENET_DEVICE_NAME);
+    strcpy(oneNET_connect_msg->produt_id, mqtt_product_id);
+    strcpy(oneNET_connect_msg->device_name, mqtt_device_name);
 
     CONNECT_MSG oneNET_msg = {
          .et = "1959846627",
@@ -149,8 +151,10 @@ uint8_t onenet_connect_msg_init(oneNET_connect_msg_t* oneNET_connect_msg, method
     mbedtls_base64_decode((unsigned char*)plaintext, sizeof(plaintext), &declen, (unsigned char*)ONENET_PRODUCT_KEY, strlen((char*)ONENET_PRODUCT_KEY));
 
 #else
-    mbedtls_base64_decode(NULL, enclen, &declen, (unsigned char*)ONENET_DEVICE_KEY, enclen);
-    mbedtls_base64_decode((unsigned char*)plaintext, sizeof(plaintext), &declen, (unsigned char*)ONENET_DEVICE_KEY, strlen((char*)ONENET_DEVICE_KEY));
+    // mbedtls_base64_decode(NULL, enclen, &declen, (unsigned char*)ONENET_DEVICE_KEY, enclen);
+    // mbedtls_base64_decode((unsigned char*)plaintext, sizeof(plaintext), &declen, (unsigned char*)ONENET_DEVICE_KEY, strlen((char*)ONENET_DEVICE_KEY));
+    mbedtls_base64_decode(NULL, enclen, &declen, (unsigned char*)mqtt_device_key, enclen);
+    mbedtls_base64_decode((unsigned char*)plaintext, sizeof(plaintext), &declen, (unsigned char*)mqtt_device_key, strlen((char*)mqtt_device_key));
 #endif
     /**
      * @brief 加密生成 hmac 密文

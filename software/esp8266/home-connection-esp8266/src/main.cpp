@@ -19,8 +19,6 @@ extern "C"{
 // 需要修改的地方
 char identifier_name1[] = "led_sta"; //物模型名称1
 
-const char *ssid = "9x";               //wifi名
-const char *password = "1984832368";       //wifi密码
 
 const char *mqtt_server = "183.230.40.96"; //onenet 的 IP地址
 const int port = 1883;                     //端口号
@@ -68,10 +66,15 @@ int  TESP_CP_TIMEOUT = 90; // test cp timeout
 bool ALLOWONDEMAND   = true; // enable on demand
 bool WMISBLOCKING    = true; // use blocking or non blocking mode, non global params wont work in non blocking
 
-uint8_t BUTTONFUNC   = 1; // 0 resetsettings, 1 configportal, 2 autoconnect
+uint8_t BUTTONFUNC   = 0; // 0 resetsettings, 1 configportal, 2 autoconnect
 
 //flag for saving data
 bool shouldSaveConfig = false;
+//flag for reset wifimanger
+bool shouldRSTWM = false;
+
+
+//////////////////////// wifi 热点配网相关 ///////////////////
 
 //callback notifying us of the need to save config
 void saveConfigCallback () {
@@ -105,9 +108,6 @@ void bindServerCallback(){
 }
 
 void wifiInfo(){
-  // can contain gargbage on esp32 if wifi is not ready yet
-  Serial.println("[WIFI] WIFI_INFO DEBUG");
-  // WiFi.printDiag(Serial);
   Serial.println("[WIFI] SAVED: " + (String)(wm.getWiFiIsSaved() ? "YES" : "NO"));
   Serial.println("[WIFI] SSID: " + (String)wm.getWiFiSSID());
   Serial.println("[WIFI] PASS: " + (String)wm.getWiFiPass());
@@ -116,12 +116,135 @@ void wifiInfo(){
   Serial.println("[MQTT] mqtt_device_name : " + String(mqtt_device_name));
   Serial.println("[MQTT] mqtt_device_key : " + String(mqtt_device_key));
 }
+//////////////////////// wifi 热点配网相关结束 ///////////////////
+
+
+
+//////////////////////// MQTT 收发相关 ///////////////////
+//向主题(物模型)发送数据
+void send_identifier_data()
+{
+  if (client.connected())
+  {
+    if(led_state == true)
+      snprintf(msgJson, sizeof(msgJson), dataPost, identifier_name1, "true"); //将数据套入dataTemplate模板中, 生成的字符串传给msgJson
+    else 
+      snprintf(msgJson, sizeof(msgJson), dataPost, identifier_name1, "false");
+    
+    Serial.print("public the data:");
+    Serial.println(msgJson);
+    client.publish(dataPostTopic_str, (uint8_t *)msgJson, strlen(msgJson));//发送数据到主题
+    
+  }
+}
+ 
+//收到主题下发的回调, 注意这个回调要实现三个形参 1:topic 主题, 2: payload: 传递过来的信息 3: length: 长度
+void callback(char *topic, byte *payload, unsigned int length)
+{
+  JsonObject root; 
+
+  Serial.println("message rev:");
+  Serial.println(topic);
+  // Serial.println(dataPostReplyTopic_str);
+  // Serial.println(dataSetTopic_str);
+  if(strcmp(topic, dataPostReplyTopic_str) == 0)
+  {
+    Serial.println("receive onenet PostReply");
+  }
+  else if(strcmp(topic, dataSetTopic_str) == 0) 
+  {
+    DeserializationError error = deserializeJson(JSON_Buffer, payload);
+    if (!error)
+    {
+      root = JSON_Buffer.as<JsonObject>(); 
+      if(JSON_Buffer["params"][identifier_name1] == true)
+        led_state = true;
+      else 
+        led_state = false;
+      digitalWrite(LED_BUILTIN, !led_state); 
+      digitalWrite(CTR_PIN, !led_state);
+      Serial.println("receive onenet ctr data");
+
+      for (size_t i = 0; i < length; i++)
+      {
+        Serial.print((char)payload[i]);
+      }
+
+      // 设置成功回复
+      const char* ID = root["id"];
+      // Serial.println(ID);
+      snprintf(dataSetReply_str, sizeof(dataSetReply_str), dataSetReply, ID); 
+      // Serial.print("public the data:");
+      // Serial.println(dataSetReply_str);
+      client.publish(dataSetReplyTopic_str, (uint8_t *)dataSetReply_str, strlen(dataSetReply_str));
+      send_identifier_data(); //更新线上数据
+    }
+    else
+    {
+      Serial.println("receive failed!!!");
+    }
+  }
+  else
+  {
+    Serial.println("other topic");
+    for (size_t i = 0; i < length; i++)
+    {
+      Serial.print((char)payload[i]);
+    }
+    Serial.println();
+  }
+
+}
+ 
+//重连函数, 如果客户端断线,可以通过此函数重连
+void clientReconnect()
+{
+  uint8_t recon_num = 5; //重连5次
+
+  while (!client.connected() && (recon_num--)) //再重连客户端
+  {
+    Serial.println("reconnect MQTT...");
+    if (client.connect(oneNET_connect_msg.device_name, oneNET_connect_msg.produt_id, oneNET_connect_msg.token))
+    {
+      Serial.println("connected");
+      client.subscribe(dataPostReplyTopic_str); //订阅设备属性上报响应主题
+      client.subscribe(dataSetTopic_str); //订阅设备属性设置请求主题
+      
+      shouldRSTWM = false;
+    }
+    else
+    {
+      Serial.println("failed");
+      Serial.println(client.state());
+      Serial.println("try again");
+      Serial.println(oneNET_connect_msg.device_name);
+      Serial.println(oneNET_connect_msg.produt_id);
+      Serial.println(oneNET_connect_msg.token);
+      digitalWrite(LED_BUILTIN, false); 
+      delay(500);
+      digitalWrite(LED_BUILTIN, true); //true - off
+      delay(2000);
+
+      shouldRSTWM = true;
+    }
+  }
+}
+
+//////////////////////// MQTT 收发相关结束 ///////////////////
+
+
+
 
 void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);     // Initialize the LED_BUILTIN pin as an output
+  pinMode(CTR_PIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, !led_state); //true - off
+  digitalWrite(CTR_PIN, !led_state);
   Serial.begin(115200);
   delay(1000);
 
-
+  
+  //////////////////////// wifi 热点配网相关 ///////////////////
   wm.setDebugOutput(true, WM_DEBUG_DEV);
   wm.debugPlatformInfo();
 
@@ -174,9 +297,6 @@ void setup() {
   }
   //end read
 
-  //reset settings - for testing
-  // wm.resetSettings();
-  // wm.erase();
 
   // setup some parameters
   WiFiManagerParameter custom_html("<p style=\"color:pink;font-weight:Bold;\">OneNet Setting HTML</p>"); // only custom html
@@ -260,17 +380,10 @@ void setup() {
      Serial.println("connected...yeey :)");
   }
   
-
-
-
+  
   //save the custom parameters to FS
   if (shouldSaveConfig) 
   {
-    //read updated parameters
-    strcpy(mqtt_product_id, custom_mqtt_product_id.getValue());
-    strcpy(mqtt_device_name, custom_mqtt_device_name.getValue());
-    strcpy(mqtt_device_key, custom_mqtt_device_key.getValue());
-
     Serial.println("saving config");
  #if defined(ARDUINOJSON_VERSION_MAJOR) && ARDUINOJSON_VERSION_MAJOR >= 6
     DynamicJsonDocument json(1024);
@@ -278,10 +391,14 @@ void setup() {
     DynamicJsonBuffer jsonBuffer;
     JsonObject& json = jsonBuffer.createObject();
 #endif
-    json["mqtt_product_id"] = mqtt_product_id;
-    json["mqtt_device_name"] = mqtt_device_name;
-    json["mqtt_device_key"] = mqtt_device_key;
+    json["mqtt_product_id"] = custom_mqtt_product_id.getValue();
+    json["mqtt_device_name"] = custom_mqtt_device_name.getValue();
+    json["mqtt_device_key"] = custom_mqtt_device_key.getValue();
 
+    Serial.println("\nparsed json");
+    Serial.println(custom_mqtt_product_id.getValue());
+    Serial.println(custom_mqtt_device_name.getValue());
+    Serial.println(custom_mqtt_device_key.getValue());
 
     File configFile = SPIFFS.open("/config.json", "w");
     if (!configFile) {
@@ -298,63 +415,104 @@ void setup() {
     configFile.close();
     //end save
   }
-
   wifiInfo();
+
+  //////////////////////// wifi 热点配网相关结束 ///////////////////
+
+
+  //////////////////////// MQTT 收发相关 ///////////////////
+  Serial.println("OneNet Setting!");
+  Serial.println(custom_mqtt_product_id.getValue());
+  Serial.println(custom_mqtt_device_name.getValue());
+  Serial.println(custom_mqtt_device_key.getValue());
+  onenet_connect_msg_init(&oneNET_connect_msg, ONENET_METHOD_MD5, custom_mqtt_product_id.getValue(), custom_mqtt_device_name.getValue(), custom_mqtt_device_key.getValue());
+  client.setServer(mqtt_server, port);                   //设置客户端连接的服务器,连接Onenet服务器, 使用6002端口
+  client.connect(oneNET_connect_msg.device_name, oneNET_connect_msg.produt_id, oneNET_connect_msg.token); //客户端连接到指定的产品的指定设备.同时输入鉴权信息
+  if (client.connected())
+  {
+    Serial.println("OneNet is connected!");//判断以下是不是连好了.
+  }
+  client.setCallback(callback);                                //设置好客户端收到信息是的回调
+  // 主题格式组包
+  snprintf(dataPostTopic_str, sizeof(dataPostTopic_str), dataPostTopic, oneNET_connect_msg.produt_id, oneNET_connect_msg.device_name);
+  snprintf(dataPostReplyTopic_str, sizeof(dataPostReplyTopic_str), dataPostReplyTopic, oneNET_connect_msg.produt_id, oneNET_connect_msg.device_name);
+  snprintf(dataSetTopic_str, sizeof(dataSetTopic_str), dataSetTopic, oneNET_connect_msg.produt_id, oneNET_connect_msg.device_name);  
+  snprintf(dataSetReplyTopic_str, sizeof(dataSetReplyTopic_str), dataSetReplyTopic, oneNET_connect_msg.produt_id, oneNET_connect_msg.device_name);
+  //主题订阅
+  client.subscribe(dataPostReplyTopic_str); //订阅设备属性上报响应主题
+  client.subscribe(dataSetTopic_str); //订阅设备属性设置请求主题
+
+  // tim1.attach(20, send_identifier_data);                            //定时每10秒调用一次发送数据函数sendTempAndHumi
+
+  //////////////////////// MQTT 收发相关结束 ///////////////////
 }
 
 
 void loop() {
+  static uint8_t rstWM_num = 0;
 
   if(!WMISBLOCKING){
     wm.process();
   }
-
-
-  // is configuration portal requested?
-  if (ALLOWONDEMAND == LOW ) {
+  if (!client.connected()) //如果客户端没连接ONENET, 重新连接
+  {
+    clientReconnect();
     delay(100);
-    if (BUTTONFUNC == 2){
-      Serial.println("BUTTON PRESSED");
-
-      // button reset/reboot
-      if(BUTTONFUNC == 0){
-        wm.resetSettings();
-        wm.reboot();
-        delay(200);
-        return;
-      }
-      
-      // start configportal
-      if(BUTTONFUNC == 1){
-        if (!wm.startConfigPortal("OnDemandAP","12345678")) {
-          Serial.println("failed to connect and hit timeout");
-          delay(3000);
-        }
-        return;
-      }
-
-      //test autoconnect as reconnect etc.
-      if(BUTTONFUNC == 2){
-        wm.setConfigPortalTimeout(TESP_CP_TIMEOUT);
-        wm.autoConnect();
-        return;
-      }
-    
-    }
-    else {
-      //if you get here you have connected to the WiFi
-      Serial.println("connected...yeey :)");
-    }
   }
+  client.loop(); //客户端循环检测
 
   // every 10 seconds
   if(millis()-mtime > 10000 ){
     if(WiFi.status() == WL_CONNECTED){
       Serial.println("Wifi connected)");
     }
-    else Serial.println("No Wifi");  
+    else 
+    {
+      Serial.println("No Wifi");  
+      shouldRSTWM = true;
+    }
     mtime = millis();
+    
   }
+
+
+
+  // 没有连接到onenet的处理（包括wifi连接失败和onenet连接失败） 尝试3次
+  if (ALLOWONDEMAND == true && shouldRSTWM == true && (rstWM_num < 3)) //也可以在这里添加一个按键触发配置的条件
+  {
+    delay(100);
+    Serial.println("wm resetSettings");
+    shouldRSTWM = false;
+    rstWM_num = rstWM_num + 1;
+
+    // 所有都重新配置
+    if(BUTTONFUNC == 0){
+      wm.resetSettings();
+      // wm.erase();
+      wm.reboot();
+      
+      delay(200);
+      return;
+    }
+    
+    // start configportal 只进行重新配网
+    if(BUTTONFUNC == 1){
+      if (!wm.startConfigPortal("OnDemandAP","12345678")) {
+        Serial.println("failed to connect and hit timeout");
+        delay(3000);
+      }
+      return;
+    }
+
+    //自动重连
+    if(BUTTONFUNC == 2){
+      wm.setConfigPortalTimeout(TESP_CP_TIMEOUT);
+      wm.autoConnect();
+      return;
+    }
+  }
+
+
   // put your main code here, to run repeatedly:
   delay(100);
 }
