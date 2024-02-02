@@ -78,13 +78,12 @@
 
 9. esp32进入深度睡眠后，如果唤醒，现象和重启是一样的
 
-10. esp8266用的SPIFFS这个文件系统，但是用到esp32上总是begin失败，所以把esp32改成了LittleFS_esp32，注意这有点bug，改动及兼容platform见原仓库
+10. esp8266用的SPIFFS这个文件系统，但是用到esp32上总是begin失败，后来发现begin里面要带一个ture，全盘擦除一下才行
 
-11. ​
+   ​
 
-    ​
+   ​
 
-    ​
 
 
 

@@ -6,7 +6,7 @@
 #include "Ticker.h"
 #include "EEPROM.h"
 #include "FS.h"
-#include <LITTLEFS.h>
+#include <SPIFFS.h>
 #include <stdio.h>
 extern "C"{
 #include "initialToken.h"
@@ -112,10 +112,6 @@ void wifiInfo(){
   Serial.println("[WIFI] SAVED: " + (String)(wm.getWiFiIsSaved() ? "YES" : "NO"));
   Serial.println("[WIFI] SSID: " + (String)wm.getWiFiSSID());
   Serial.println("[WIFI] PASS: " + (String)wm.getWiFiPass());
-
-  Serial.println("[MQTT] mqtt_product_id : " + String(mqtt_product_id));
-  Serial.println("[MQTT] mqtt_device_name : " + String(mqtt_device_name));
-  Serial.println("[MQTT] mqtt_device_key : " + String(mqtt_device_key));
 }
 //////////////////////// wifi 热点配网相关结束 ///////////////////
 
@@ -257,12 +253,12 @@ void setup() {
   wm.setDebugOutput(true, WM_DEBUG_DEV);
   wm.debugPlatformInfo();
 
-  if (LITTLEFS.begin()) {
+  if (SPIFFS.begin(true)) {
     Serial.println("mounted file system");
-    if (LITTLEFS.exists("/config.json")) {
+    if (SPIFFS.exists("/config.json")) {
       //file exists, reading and loading
       Serial.println("reading config file");
-      File configFile = LITTLEFS.open("/config.json", "r");
+      File configFile = SPIFFS.open("/config.json", "r");
       if (configFile) {
         Serial.println("opened config file");
         size_t size = configFile.size();
@@ -409,7 +405,7 @@ void setup() {
     Serial.println(custom_mqtt_device_name.getValue());
     Serial.println(custom_mqtt_device_key.getValue());
 
-    File configFile = LITTLEFS.open("/config.json", "w");
+    File configFile = SPIFFS.open("/config.json", "w");
     if (!configFile) {
       Serial.println("failed to open config file for writing");
     }
