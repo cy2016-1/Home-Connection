@@ -45,7 +45,6 @@ DynamicJsonDocument JSON_Buffer(2*1024); /* 申明一个大小为2K的DynamicJsonDocumen
 oneNET_connect_msg_t oneNET_connect_msg;
 WiFiClient espClient;           //创建一个WIFI连接客户端
 PubSubClient client(espClient); // 创建一个PubSub客户端, 传入创建的WIFI客户端
-WiFiManager wifiManager;
 //全局定义
 bool led_state = false; //true-on
 
