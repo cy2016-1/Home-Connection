@@ -15,6 +15,10 @@ extern "C"{
 
 #define LED_BUILTIN 2
 #define CTR_PIN     0
+#define OPEN        false
+#define CLOSE       true
+#define OFFLINE    "T"  //离线模式判断字符
+#define ONFLAG     "O"  //开关判断字符
 
 // 需要修改的地方
 char identifier_name1[] = "led_sta"; //物模型名称1
@@ -53,6 +57,8 @@ char mqtt_product_id[10];
 char mqtt_device_name[40];
 char mqtt_device_key[44];
 
+String offline_sta, on_off_sta; //离线模式判断 开关状态
+
 unsigned long mtime = 0;
 
 WiFiManager wm;
@@ -73,7 +79,44 @@ bool shouldSaveConfig = false;
 bool shouldRSTWM = false;
 
 
+
 //////////////////////// wifi 热点配网相关 ///////////////////
+void wifiInfo(){
+  static uint32_t print_num = 0;
+
+  Serial.println("Print num: " + (String)(print_num++));
+
+  if(WiFi.status() == WL_CONNECTED){
+    Serial.println("[WIFI] STATE: Wifi connected");
+  }
+  else 
+  {
+    Serial.println("[WIFI] STATE: No Wifi");
+  }
+
+  Serial.println("[WIFI] SAVED: " + (String)(wm.getWiFiIsSaved() ? "YES" : "NO"));
+  Serial.println("[WIFI] SSID: " + (String)wm.getWiFiSSID());
+  Serial.println("[WIFI] PASS: " + (String)wm.getWiFiPass());
+  
+  // Serial.println("[MQTT] mqtt_product_id : " + String(custom_mqtt_product_id.getValue()));
+  // Serial.println("[MQTT] mqtt_device_key : " + String(custom_mqtt_device_key.getValue()));
+  // Serial.println("[MQTT] mqtt_device_name : " + String(custom_mqtt_device_name.getValue()));
+
+  if(client.connected()){
+    Serial.println("[MQTT] STATE: Connected");
+  }
+  else 
+  {
+    Serial.println("[MQTT] STATE: Disconnected");
+  }
+
+  Serial.println("[MQTT] mqtt_product_id : " + String(mqtt_product_id));
+  Serial.println("[MQTT] mqtt_device_key : " + String(mqtt_device_key));
+  Serial.println("[MQTT] mqtt_device_name : " + String(mqtt_device_name));
+
+  Serial.println("[BUTTON] button mode offline sta : " + String((offline_sta == OFFLINE)  ? "OFFLINE" : "ONLIE"));
+  Serial.println("[BUTTON] button onoff sta : " + String((on_off_sta == ONFLAG)  ? "ON" : "OFF"));
+}
 
 //callback notifying us of the need to save config
 void saveConfigCallback () {
@@ -106,15 +149,7 @@ void bindServerCallback(){
   wm.server->on("/erase",handleNotFound); // disable erase
 }
 
-void wifiInfo(){
-  Serial.println("[WIFI] SAVED: " + (String)(wm.getWiFiIsSaved() ? "YES" : "NO"));
-  Serial.println("[WIFI] SSID: " + (String)wm.getWiFiSSID());
-  Serial.println("[WIFI] PASS: " + (String)wm.getWiFiPass());
 
-  Serial.println("[MQTT] mqtt_product_id : " + String(mqtt_product_id));
-  Serial.println("[MQTT] mqtt_device_name : " + String(mqtt_device_name));
-  Serial.println("[MQTT] mqtt_device_key : " + String(mqtt_device_key));
-}
 //////////////////////// wifi 热点配网相关结束 ///////////////////
 
 
@@ -125,7 +160,7 @@ void send_identifier_data()
 {
   if (client.connected())
   {
-    if(led_state == true)
+    if(led_state == OPEN)
       snprintf(msgJson, sizeof(msgJson), dataPost, identifier_name1, "true"); //将数据套入dataTemplate模板中, 生成的字符串传给msgJson
     else 
       snprintf(msgJson, sizeof(msgJson), dataPost, identifier_name1, "false");
@@ -157,11 +192,11 @@ void callback(char *topic, byte *payload, unsigned int length)
     {
       root = JSON_Buffer.as<JsonObject>(); 
       if(JSON_Buffer["params"][identifier_name1] == true)
-        led_state = true;
+        led_state = OPEN;
       else 
-        led_state = false;
-      digitalWrite(LED_BUILTIN, !led_state); 
-      digitalWrite(CTR_PIN, !led_state);
+        led_state = CLOSE;
+      digitalWrite(LED_BUILTIN, led_state); 
+      digitalWrite(CTR_PIN, led_state);
       Serial.println("receive onenet ctr data");
 
       for (size_t i = 0; i < length; i++)
@@ -237,10 +272,7 @@ void clientReconnect()
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);     // Initialize the LED_BUILTIN pin as an output
   pinMode(CTR_PIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, !led_state); //true - off
-  digitalWrite(CTR_PIN, !led_state);
   Serial.begin(115200);
-  delay(1000);
 
   
   //////////////////////// wifi 热点配网相关 ///////////////////
@@ -284,6 +316,30 @@ void setup() {
               mqtt_device_name[i] = value[i];
           }
           Serial.println("[MQTT] mqtt_device_name : " + String(mqtt_device_name));
+
+
+          offline_sta = (String)json["OFFLINE"];
+          on_off_sta = (String)json["ONFLAG"];
+
+          wifiInfo();
+          if(offline_sta == OFFLINE) 
+          {
+            if(on_off_sta == ONFLAG)
+            {
+              digitalWrite(LED_BUILTIN, OPEN); //true - off
+              digitalWrite(CTR_PIN, OPEN);
+            }
+            else
+            {
+              digitalWrite(LED_BUILTIN, CLOSE); 
+              digitalWrite(CTR_PIN, CLOSE);
+            }
+          }
+          else
+          {
+              digitalWrite(LED_BUILTIN, CLOSE); //true - off
+              digitalWrite(CTR_PIN, CLOSE);
+          }
           
         } else {
           Serial.println("failed to load json config");
@@ -298,10 +354,14 @@ void setup() {
 
 
   // setup some parameters
-  WiFiManagerParameter custom_html("<p style=\"color:pink;font-weight:Bold;\">OneNet Setting HTML</p>"); // only custom html
   WiFiManagerParameter custom_mqtt_product_id("product_id", "product_id", mqtt_product_id, 10);
   WiFiManagerParameter custom_mqtt_device_name("device_name", "device_name", mqtt_device_name, 40);
   WiFiManagerParameter custom_mqtt_device_key("device_key", "device_key", mqtt_device_key, 44);
+  const char _customHtml_checkbox[] = "type=\"checkbox\""; 
+  WiFiManagerParameter custom_offline_checkbox("offline_checkbox", "Mode offline", OFFLINE, 2, _customHtml_checkbox, WFM_LABEL_AFTER);
+  WiFiManagerParameter custom_onoff_checkbox("onoff_checkbox", "open", ONFLAG, 2, _customHtml_checkbox, WFM_LABEL_AFTER);
+  WiFiManagerParameter custom_html("<p style=\"color:pink;font-weight:Bold;\">OneNet Setting HTML</p>"); // only custom html
+
 
   const char *bufferStr = R"(
   <!-- INPUT CHOICE -->
@@ -337,7 +397,11 @@ void setup() {
   wm.addParameter(&custom_mqtt_device_name);
   wm.addParameter(&custom_mqtt_device_key);
 
+  wm.addParameter(&custom_offline_checkbox);
+  wm.addParameter(&custom_onoff_checkbox);
   wm.addParameter(&custom_html_inputs);
+ 
+
 
   // set custom html menu content , inside menu item "custom", see setMenu()
   const char* menuhtml = "<form action='/custom' method='get'><button>Custom</button></form><br/>\n";
@@ -348,23 +412,23 @@ void setup() {
 
   std::vector<const char *> menu = {"wifi","wifinoscan","info","param","custom","close","sep","erase","update","restart","exit"};
 
-  
   if(!WMISBLOCKING){
     wm.setConfigPortalBlocking(false);
   }
 
-  //sets timeout until configuration portal gets turned off
-  //useful to make it all retry or go to sleep in seconds
-  wm.setConfigPortalTimeout(TESP_CP_TIMEOUT);
-  
   wm.setBreakAfterConfig(true); // needed to use saveWifiCallback
+
+  if(offline_sta != OFFLINE) 
+  {
+    //sets timeout until configuration portal gets turned off
+    //useful to make it all retry or go to sleep in seconds
+    wm.setConfigPortalTimeout(TESP_CP_TIMEOUT);
+  }
 
   wifiInfo();
 
-  // to preload autoconnect with credentials
-  // wm.preloadWiFi("ssid","password");
 
-  if(!wm.autoConnect("AutoConnectAP","12345678")) {
+  if(!wm.autoConnect()) {
     Serial.println("failed to connect and hit timeout");
   }
   else if(TEST_CP) {
@@ -372,7 +436,7 @@ void setup() {
     delay(1000);
     Serial.println("TEST_CP ENABLED");
     wm.setConfigPortalTimeout(TESP_CP_TIMEOUT);
-    wm.startConfigPortal("ConnectAP","12345678");
+    wm.startConfigPortal();
   }
   else {
     //if you get here you have connected to the WiFi
@@ -393,6 +457,11 @@ void setup() {
     json["mqtt_product_id"] = custom_mqtt_product_id.getValue();
     json["mqtt_device_name"] = custom_mqtt_device_name.getValue();
     json["mqtt_device_key"] = custom_mqtt_device_key.getValue();
+    json["OFFLINE"] = custom_offline_checkbox.getValue();
+    json["ONFLAG"] = custom_onoff_checkbox.getValue();
+    offline_sta = (String)json["OFFLINE"];
+    on_off_sta = (String)json["ONFLAG"];
+
 
     Serial.println("\nparsed json");
     Serial.println(custom_mqtt_product_id.getValue());
@@ -414,7 +483,13 @@ void setup() {
     configFile.close();
     //end save
   }
-  wifiInfo();
+
+  if(offline_sta == OFFLINE)
+  {
+    wm.reboot();
+  }
+  
+
 
   //////////////////////// wifi 热点配网相关结束 ///////////////////
 
@@ -453,30 +528,25 @@ void loop() {
   if(!WMISBLOCKING){
     wm.process();
   }
-  if (!client.connected()) //如果客户端没连接ONENET, 重新连接
+  if (!client.connected()) //如果客户端没连接ONENET且非离线模式, 重新连接
   {
     clientReconnect();
     delay(100);
   }
   client.loop(); //客户端循环检测
 
-  // every 10 seconds
-  if(millis()-mtime > 10000 ){
-    if(WiFi.status() == WL_CONNECTED){
-      Serial.println("Wifi connected)");
-    }
-    else 
-    {
-      Serial.println("No Wifi");  
+  // every 10 seconds printf state
+  if(millis()-mtime > 10000 )
+  {
+    wifiInfo();
+    mtime = millis();
+    if(WiFi.status() != WL_CONNECTED){
       shouldRSTWM = true;
     }
-    mtime = millis();
     
   }
 
-
-
-  // 没有连接到onenet的处理（包括wifi连接失败和onenet连接失败） 尝试3次
+  // 没有连接到onenet的处理（包括wifi连接失败和onenet连接失败） 尝试3次 非离线模式
   if (ALLOWONDEMAND == true && shouldRSTWM == true && (rstWM_num < 3)) //也可以在这里添加一个按键触发配置的条件
   {
     delay(100);
@@ -486,7 +556,7 @@ void loop() {
 
     // 所有都重新配置
     if(BUTTONFUNC == 0){
-      wm.resetSettings();
+      // wm.resetSettings();
       // wm.erase();
       wm.reboot();
       
@@ -496,7 +566,7 @@ void loop() {
     
     // start configportal 只进行重新配网
     if(BUTTONFUNC == 1){
-      if (!wm.startConfigPortal("OnDemandAP","12345678")) {
+      if (!wm.startConfigPortal()) {
         Serial.println("failed to connect and hit timeout");
         delay(3000);
       }
@@ -514,4 +584,5 @@ void loop() {
 
   // put your main code here, to run repeatedly:
   delay(100);
+
 }
